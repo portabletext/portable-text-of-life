@@ -207,6 +207,30 @@ function LifePlugin() {
           ],
         ],
       }),
+
+      // Type 1 or 0 to create new cells
+      defineInputRule({
+        on: /1|0/,
+        actions: [
+          ({event}) => [
+            ...event.matches.map((match) =>
+              raise({
+                type: 'delete',
+                at: match.targetOffsets,
+              }),
+            ),
+            ...event.matches.map((match) =>
+              raise({
+                type: 'insert.child',
+                child: {
+                  _type: 'cell',
+                  alive: match.text === '1',
+                },
+              }),
+            ),
+          ],
+        ],
+      }),
     ],
     [actorRef, editor],
   )
@@ -217,6 +241,9 @@ function LifePlugin() {
         <p>
           Type <em>stop</em>, <em>start</em>, <em>reset</em> or <em>random</em>{' '}
           to control the game.
+        </p>
+        <p>
+          Type <em>1</em> or <em>0</em> to create new cells.
         </p>
         <p>
           Click on cells or press <kbd>SPACE</kbd> to flip the state of all
