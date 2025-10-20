@@ -3,33 +3,46 @@ import {
   defineSchema,
   Editor,
   EditorProvider,
+  EditorSelector,
   keyGenerator,
   PortableTextChild,
   PortableTextEditable,
-  PortableTextTextBlock,
   useEditor,
   type BlockChildRenderProps,
 } from '@portabletext/editor'
 import {
   BehaviorAction,
   defineBehavior,
+  effect,
   raise,
 } from '@portabletext/editor/behaviors'
-import { BehaviorPlugin } from '@portabletext/editor/plugins'
+import {BehaviorPlugin} from '@portabletext/editor/plugins'
 import {
   getFocusInlineObject,
   getPreviousInlineObject,
   getSelectedValue,
 } from '@portabletext/editor/selectors'
-import { isTextBlock } from '@portabletext/editor/utils'
-import { useActorRef, useSelector } from '@xstate/react'
-import { fromCallback, setup } from 'xstate'
+import {isTextBlock} from '@portabletext/editor/utils'
+import {defineInputRule, InputRulePlugin} from '@portabletext/plugin-input-rule'
+import {useActorRef} from '@xstate/react'
+import {useMemo} from 'react'
+import {fromCallback, setup} from 'xstate'
 
 export function PortableTextOfLife() {
   return (
     <EditorProvider
       initialConfig={{
-        initialValue: createEditorValue(16, 'random'),
+        // Initiate the editor with 16 blocks
+        initialValue: Array.from({length: 16}, () => ({
+          _key: keyGenerator(),
+          _type: 'block',
+          // Each with 16 cells with a random `alive` state
+          children: Array.from({length: 16}, () => ({
+            _key: keyGenerator(),
+            _type: 'cell',
+            alive: Math.random() < 0.5,
+          })),
+        })),
         schemaDefinition: defineSchema({
           inlineObjects: [
             {name: 'cell', fields: [{name: 'alive', type: 'boolean'}]},
@@ -45,48 +58,6 @@ export function PortableTextOfLife() {
       <LifePlugin />
     </EditorProvider>
   )
-}
-
-function createEditorValue(
-  size: number,
-  cellState: 'alive' | 'dead' | 'random',
-): Array<PortableTextTextBlock> {
-  return Array.from({length: size}, () =>
-    Array.from({length: size}, () =>
-      cellState === 'random' ? Math.random() < 0.5 : cellState === 'alive',
-    ),
-  ).map((row) => deserializeBlock(row))
-}
-
-function deserializeBlock(
-  serializedBlock: Array<boolean>,
-): PortableTextTextBlock {
-  // The editor requires at least one empty span between inline objects
-  return {
-    _type: 'block',
-    _key: keyGenerator(),
-    children: serializedBlock.flatMap((cell, index) => [
-      ...(index === 0
-        ? [
-            {
-              _key: keyGenerator(),
-              _type: 'span',
-              text: '',
-            },
-          ]
-        : []),
-      {
-        _key: keyGenerator(),
-        _type: 'cell',
-        alive: cell,
-      },
-      {
-        _key: keyGenerator(),
-        _type: 'span',
-        text: '',
-      },
-    ]),
-  }
 }
 
 function renderChild(props: BlockChildRenderProps) {
@@ -113,6 +84,35 @@ function isCellInlineObject(
   return child._type === 'cell'
 }
 
+// Custom Selector to get all cells in the editor
+const getCells: EditorSelector<
+  Array<{
+    node: CellInlineObject
+    path: ChildPath
+  }>
+> = (snapshot) => {
+  return snapshot.context.value.flatMap((block) => {
+    if (!isTextBlock(snapshot.context, block)) {
+      return []
+    }
+
+    return block.children.flatMap((child) => {
+      if (!isCellInlineObject(child)) {
+        return []
+      }
+
+      return {
+        node: child,
+        path: [
+          {_key: block._key},
+          'children',
+          {_key: child._key},
+        ] satisfies ChildPath,
+      }
+    })
+  })
+}
+
 /**
  * Sets up a heartbeat as well as a few Behaviors to allow you to interact with
  * the game.
@@ -120,39 +120,110 @@ function isCellInlineObject(
 function LifePlugin() {
   const editor = useEditor()
   const actorRef = useActorRef(heartbeatMachine, {input: {editor}})
-  const running = useSelector(actorRef, (state) => state.matches('running'))
+  const inputRules = useMemo(
+    () => [
+      // Type "stop" to stop the game
+      defineInputRule({
+        on: /stop/,
+        actions: [
+          ({event}) => [
+            ...event.matches.map((match) =>
+              raise({
+                type: 'delete',
+                at: match.targetOffsets,
+              }),
+            ),
+            effect(() => {
+              actorRef.send({type: 'stop'})
+            }),
+          ],
+        ],
+      }),
+
+      // Type "start" to start the game
+      defineInputRule({
+        on: /start/,
+        actions: [
+          ({event}) => [
+            ...event.matches.map((match) =>
+              raise({
+                type: 'delete',
+                at: match.targetOffsets,
+              }),
+            ),
+            effect(() => {
+              actorRef.send({type: 'start'})
+            }),
+          ],
+        ],
+      }),
+
+      // Type "random" to set the cells to a random state
+      defineInputRule({
+        on: /random/,
+        guard: ({snapshot}) => {
+          return {cells: getCells(snapshot)}
+        },
+        actions: [
+          ({event}, {cells}) => [
+            ...event.matches.map((match) =>
+              raise({
+                type: 'delete',
+                at: match.targetOffsets,
+              }),
+            ),
+            ...cells.map((cell) =>
+              raise({
+                type: 'child.set',
+                at: cell.path,
+                props: {alive: Math.random() < 0.5},
+              }),
+            ),
+          ],
+        ],
+      }),
+
+      // Type "reset" to set the cells to a dead state
+      defineInputRule({
+        on: /reset/,
+        guard: ({snapshot}) => {
+          return {cells: getCells(snapshot)}
+        },
+        actions: [
+          ({event}, {cells}) => [
+            ...event.matches.map((match) =>
+              raise({
+                type: 'delete',
+                at: match.targetOffsets,
+              }),
+            ),
+            ...cells.map((cell) =>
+              raise({
+                type: 'child.set',
+                at: cell.path,
+                props: {alive: false},
+              }),
+            ),
+          ],
+        ],
+      }),
+    ],
+    [actorRef, editor],
+  )
 
   return (
     <>
-      <nav>
-        <button
-          onClick={() => {
-            actorRef.send({type: 'toggle paused'})
-          }}
-        >
-          {running ? 'stop' : 'start'}
-        </button>
-        <button
-          onClick={() => {
-            editor.send({
-              type: 'update value',
-              value: createEditorValue(16, 'random'),
-            })
-          }}
-        >
-          random
-        </button>
-        <button
-          onClick={() => {
-            editor.send({
-              type: 'update value',
-              value: createEditorValue(16, 'dead'),
-            })
-          }}
-        >
-          reset
-        </button>
-      </nav>
+      <div>
+        <p>
+          Type <em>stop</em>, <em>start</em>, <em>reset</em> or <em>random</em>{' '}
+          to control the game.
+        </p>
+        <p>
+          Click on cells or press <kbd>SPACE</kbd> to flip the state of all
+          selected cells.
+        </p>
+      </div>
+      <InputRulePlugin rules={inputRules} />
       <BehaviorPlugin
         behaviors={[
           /**
@@ -393,7 +464,7 @@ const heartbeatMachine = setup({
     input: {} as {
       editor: Editor
     },
-    events: {} as {type: 'tick'} | {type: 'toggle paused'},
+    events: {} as {type: 'tick'} | {type: 'stop'} | {type: 'start'},
   },
   actors: {
     tick: fromCallback(({sendBack}) => {
@@ -415,7 +486,7 @@ const heartbeatMachine = setup({
   states: {
     paused: {
       on: {
-        'toggle paused': {
+        start: {
           target: 'running',
         },
       },
@@ -425,14 +496,14 @@ const heartbeatMachine = setup({
         src: 'tick',
       },
       on: {
-        'tick': {
+        tick: {
           actions: [
             ({context}) => {
               context.editor.send({type: 'custom.tick'})
             },
           ],
         },
-        'toggle paused': {
+        stop: {
           target: 'paused',
         },
       },

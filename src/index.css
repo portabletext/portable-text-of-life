@@ -29,20 +29,13 @@ body {
   font-size: 32px;
 }
 
-nav {
-  display: flex;
-  gap: 1rem;
+p {
+  max-width: 40ch;
+  line-height: 1.5;
 }
 
-button {
-  all: unset;
-  color: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-button:hover {
-  text-decoration: none;
+em, kbd {
+  background-color: rgba(0, 0, 0, 0.1)
 }
 
 [data-block-name='block'] {
