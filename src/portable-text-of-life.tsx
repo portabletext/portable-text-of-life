@@ -122,9 +122,9 @@ function LifePlugin() {
   const actorRef = useActorRef(heartbeatMachine, {input: {editor}})
   const inputRules = useMemo(
     () => [
-      // Type "stop" to stop the game
+      // Type "stop!" to stop the game
       defineInputRule({
-        on: /stop/,
+        on: /stop!/,
         actions: [
           ({event}) => [
             ...event.matches.map((match) =>
@@ -140,9 +140,9 @@ function LifePlugin() {
         ],
       }),
 
-      // Type "start" to start the game
+      // Type "start!" to start the game
       defineInputRule({
-        on: /start/,
+        on: /start!/,
         actions: [
           ({event}) => [
             ...event.matches.map((match) =>
@@ -158,9 +158,9 @@ function LifePlugin() {
         ],
       }),
 
-      // Type "random" to set the cells to a random state
+      // Type "random!" to set the cells to a random state
       defineInputRule({
-        on: /random/,
+        on: /random!/,
         guard: ({snapshot}) => {
           return {cells: getCells(snapshot)}
         },
@@ -183,9 +183,9 @@ function LifePlugin() {
         ],
       }),
 
-      // Type "reset" to set the cells to a dead state
+      // Type "reset!" to set the cells to a dead state
       defineInputRule({
-        on: /reset/,
+        on: /reset!/,
         guard: ({snapshot}) => {
           return {cells: getCells(snapshot)}
         },
@@ -208,9 +208,9 @@ function LifePlugin() {
         ],
       }),
 
-      // Type 1 or 0 to create new cells
+      // Type "spawn1!" or "spawn0!" to create new cells
       defineInputRule({
-        on: /1|0/,
+        on: /spawn1!|spawn0!/,
         actions: [
           ({event}) => [
             ...event.matches.map((match) =>
@@ -224,7 +224,7 @@ function LifePlugin() {
                 type: 'insert.child',
                 child: {
                   _type: 'cell',
-                  alive: match.text === '1',
+                  alive: match.text === 'spawn1!',
                 },
               }),
             ),
@@ -239,11 +239,11 @@ function LifePlugin() {
     <>
       <div>
         <p>
-          Type <em>stop</em>, <em>start</em>, <em>reset</em> or <em>random</em>{' '}
-          to control the game.
+          Type <em>stop!</em>, <em>start!</em>, <em>reset!</em> or{' '}
+          <em>random!</em> to control the game.
         </p>
         <p>
-          Type <em>1</em> or <em>0</em> to create new cells.
+          Type <em>spawn1!</em> or <em>spawn0!</em> to create new cells.
         </p>
         <p>
           Click on cells or press <kbd>SPACE</kbd> to flip the state of all
