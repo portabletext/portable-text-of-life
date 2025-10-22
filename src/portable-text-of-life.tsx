@@ -468,7 +468,7 @@ const heartbeatMachine = setup({
   context: ({input}) => ({
     editor: input.editor,
   }),
-  initial: 'running',
+  initial: 'paused',
   states: {
     paused: {
       on: {

@@ -30,7 +30,7 @@ function PortableTextOfLife() {
           children: Array.from({length: 16}, () => ({
             _key: keyGenerator(),
             _type: 'cell',
-            alive: Math.random() < 0.5,
+            alive: false,
           })),
         })),
         schemaDefinition: defineSchema({
